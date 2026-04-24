@@ -146,6 +146,12 @@ async def main() -> None:
 if __name__ == "__main__":
     import sys
     if "ipykernel" in sys.modules or "google.colab" in sys.modules:
-        await main()  # type: ignore[top-level-await]
+        # Jupyter/Colab already has a running event loop — use nest_asyncio
+        try:
+            import nest_asyncio
+            nest_asyncio.apply()
+        except ImportError:
+            pass
+        asyncio.get_event_loop().run_until_complete(main())
     else:
         asyncio.run(main())
