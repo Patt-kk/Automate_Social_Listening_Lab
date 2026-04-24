@@ -1,0 +1,12 @@
+# DOM Scraper — Python dependencies
+
+# Proxy server
+flask>=3.0
+flask-cors>=4.0
+httpx>=0.27
+
+# Playwright scraper
+playwright>=1.44
+
+# (Optional) run Playwright install after pip install:
+#   playwright install chromium
