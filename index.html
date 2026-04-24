@@ -1,0 +1,623 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>DOM Intelligence Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:       #0a0b0f;
+    --surface:  #111318;
+    --surface2: #181b22;
+    --border:   #1f2330;
+    --accent:   #00e5a0;
+    --accent2:  #0090ff;
+    --warn:     #ff6b35;
+    --text:     #e8eaf0;
+    --muted:    #5a6075;
+    --mono:     'DM Mono', monospace;
+    --sans:     'Syne', sans-serif;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* ── Grid noise texture ── */
+  body::before {
+    content: '';
+    position: fixed; inset: 0;
+    background-image:
+      radial-gradient(circle at 20% 20%, rgba(0,229,160,.04) 0%, transparent 50%),
+      radial-gradient(circle at 80% 80%, rgba(0,144,255,.04) 0%, transparent 50%);
+    pointer-events: none; z-index: 0;
+  }
+
+  /* ── Layout ── */
+  .shell { position: relative; z-index: 1; max-width: 1200px; margin: 0 auto; padding: 0 24px 60px; }
+
+  /* ── Header ── */
+  header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 28px 0 32px;
+    border-bottom: 1px solid var(--border);
+  }
+  .logo { display: flex; align-items: center; gap: 12px; }
+  .logo-icon {
+    width: 36px; height: 36px; border-radius: 8px;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    display: grid; place-items: center; font-size: 17px; font-weight: 800;
+    font-family: var(--mono); color: #000; letter-spacing: -1px;
+  }
+  .logo-name { font-size: 18px; font-weight: 700; letter-spacing: -.5px; }
+  .logo-sub  { font-size: 11px; font-family: var(--mono); color: var(--muted); margin-top: 1px; }
+  .status-pill {
+    display: flex; align-items: center; gap: 7px;
+    padding: 6px 14px; border-radius: 99px;
+    border: 1px solid var(--border); background: var(--surface);
+    font-size: 12px; font-family: var(--mono); color: var(--muted);
+  }
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); }
+  .dot.live { background: var(--accent); box-shadow: 0 0 8px var(--accent); animation: pulse 2s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+
+  /* ── Login card ── */
+  #login-panel {
+    margin: 60px auto; max-width: 420px;
+    background: var(--surface); border: 1px solid var(--border); border-radius: 16px;
+    padding: 40px; animation: fadeUp .4s ease;
+  }
+  @keyframes fadeUp { from{opacity:0;transform:translateY(16px)} to{opacity:1;transform:none} }
+  .panel-title { font-size: 22px; font-weight: 700; margin-bottom: 6px; }
+  .panel-sub   { font-size: 13px; color: var(--muted); font-family: var(--mono); margin-bottom: 28px; }
+
+  .field { margin-bottom: 16px; }
+  .field label { display: block; font-size: 11px; font-family: var(--mono); color: var(--muted); margin-bottom: 6px; letter-spacing: .5px; text-transform: uppercase; }
+  .field input {
+    width: 100%; padding: 11px 14px;
+    background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
+    color: var(--text); font-family: var(--mono); font-size: 14px;
+    outline: none; transition: border-color .2s;
+  }
+  .field input:focus { border-color: var(--accent); }
+
+  .btn {
+    width: 100%; padding: 13px; border-radius: 8px; border: none; cursor: pointer;
+    font-family: var(--sans); font-size: 14px; font-weight: 700;
+    background: var(--accent); color: #000;
+    transition: opacity .2s, transform .1s;
+  }
+  .btn:hover { opacity: .9; }
+  .btn:active { transform: scale(.98); }
+  .btn:disabled { opacity: .4; cursor: not-allowed; }
+  .btn.secondary {
+    background: var(--surface2); color: var(--text);
+    border: 1px solid var(--border); margin-top: 10px;
+  }
+
+  .err-msg { margin-top: 14px; font-size: 12px; font-family: var(--mono); color: var(--warn); text-align: center; min-height: 18px; }
+
+  /* ── Dashboard ── */
+  #dashboard { display: none; animation: fadeUp .4s ease; }
+
+  /* ── Top bar ── */
+  .topbar {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 24px 0 28px; gap: 12px; flex-wrap: wrap;
+  }
+  .topbar-left h1 { font-size: 26px; font-weight: 800; }
+  .topbar-left p  { font-size: 12px; color: var(--muted); font-family: var(--mono); margin-top: 3px; }
+  .topbar-actions { display: flex; gap: 10px; }
+  .icon-btn {
+    padding: 9px 18px; border-radius: 8px; border: 1px solid var(--border);
+    background: var(--surface); color: var(--text);
+    font-family: var(--mono); font-size: 12px; cursor: pointer;
+    display: flex; align-items: center; gap: 7px; transition: border-color .2s;
+  }
+  .icon-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .icon-btn.accent { background: var(--accent); border-color: var(--accent); color: #000; font-weight: 600; }
+  .icon-btn.accent:hover { opacity: .85; color: #000; }
+
+  /* ── Stat cards ── */
+  .stats-row { display: grid; grid-template-columns: repeat(4,1fr); gap: 14px; margin-bottom: 24px; }
+  @media(max-width:700px){ .stats-row{grid-template-columns:1fr 1fr;} }
+  .stat-card {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+    padding: 18px 20px;
+  }
+  .stat-label { font-size: 10px; font-family: var(--mono); color: var(--muted); text-transform: uppercase; letter-spacing: .6px; }
+  .stat-value { font-size: 28px; font-weight: 800; margin-top: 4px; }
+  .stat-value.green { color: var(--accent); }
+  .stat-value.blue  { color: var(--accent2); }
+  .stat-value.warn  { color: var(--warn); }
+  .stat-delta { font-size: 11px; font-family: var(--mono); color: var(--muted); margin-top: 3px; }
+
+  /* ── Table panel ── */
+  .table-panel {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 14px;
+    overflow: hidden; margin-bottom: 24px;
+  }
+  .panel-head {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 16px 20px; border-bottom: 1px solid var(--border);
+  }
+  .panel-head h2 { font-size: 14px; font-weight: 700; }
+  .row-count { font-size: 11px; font-family: var(--mono); color: var(--muted); }
+
+  /* Search bar */
+  .search-wrap { padding: 12px 20px; border-bottom: 1px solid var(--border); }
+  .search-wrap input {
+    width: 100%; max-width: 340px; padding: 8px 12px;
+    background: var(--bg); border: 1px solid var(--border); border-radius: 6px;
+    color: var(--text); font-family: var(--mono); font-size: 13px; outline: none;
+  }
+  .search-wrap input:focus { border-color: var(--accent); }
+
+  .table-scroll { overflow-x: auto; max-height: 480px; overflow-y: auto; }
+  table { width: 100%; border-collapse: collapse; font-family: var(--mono); font-size: 13px; }
+  thead th {
+    position: sticky; top: 0;
+    background: var(--surface2); padding: 11px 16px; text-align: left;
+    font-size: 10px; text-transform: uppercase; letter-spacing: .7px; color: var(--muted);
+    border-bottom: 1px solid var(--border); white-space: nowrap; cursor: pointer;
+    user-select: none;
+  }
+  thead th:hover { color: var(--accent); }
+  thead th.sorted { color: var(--accent); }
+  tbody tr { border-bottom: 1px solid var(--border); transition: background .1s; }
+  tbody tr:last-child { border-bottom: none; }
+  tbody tr:hover { background: var(--surface2); }
+  td { padding: 10px 16px; color: var(--text); white-space: nowrap; max-width: 260px; overflow: hidden; text-overflow: ellipsis; }
+  td:first-child { color: var(--muted); font-size: 11px; }
+
+  /* ── Empty / loading states ── */
+  .empty-state {
+    padding: 60px 20px; text-align: center;
+    color: var(--muted); font-family: var(--mono); font-size: 13px;
+  }
+  .empty-state .big { font-size: 32px; margin-bottom: 10px; }
+
+  .loader {
+    display: flex; align-items: center; justify-content: center; gap: 10px;
+    padding: 60px 20px; font-family: var(--mono); font-size: 13px; color: var(--muted);
+  }
+  .spinner {
+    width: 18px; height: 18px; border: 2px solid var(--border);
+    border-top-color: var(--accent); border-radius: 50%;
+    animation: spin .7s linear infinite;
+  }
+  @keyframes spin { to{transform:rotate(360deg)} }
+
+  /* ── Proxy notice ── */
+  .notice {
+    border: 1px solid var(--border); border-left: 3px solid var(--accent2);
+    background: var(--surface); border-radius: 8px;
+    padding: 12px 16px; font-family: var(--mono); font-size: 12px; color: var(--muted);
+    margin-bottom: 22px; line-height: 1.7;
+  }
+  .notice strong { color: var(--text); }
+
+  /* ── CSV import ── */
+  .drop-zone {
+    border: 2px dashed var(--border); border-radius: 12px;
+    padding: 40px 20px; text-align: center; cursor: pointer;
+    transition: border-color .2s; font-family: var(--mono);
+    color: var(--muted); font-size: 13px; margin-bottom: 24px;
+  }
+  .drop-zone:hover, .drop-zone.drag { border-color: var(--accent); color: var(--accent); }
+  .drop-zone .big { font-size: 28px; margin-bottom: 8px; }
+  #file-input { display: none; }
+
+  /* ── Pagination ── */
+  .pagination {
+    display: flex; align-items: center; justify-content: flex-end; gap: 8px;
+    padding: 12px 16px; border-top: 1px solid var(--border);
+    font-family: var(--mono); font-size: 12px; color: var(--muted);
+  }
+  .page-btn {
+    padding: 5px 10px; border-radius: 5px; border: 1px solid var(--border);
+    background: var(--surface2); color: var(--muted); cursor: pointer; transition: all .15s;
+  }
+  .page-btn:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+  .page-btn:disabled { opacity: .3; cursor: not-allowed; }
+  .page-btn.active { border-color: var(--accent); color: var(--accent); }
+</style>
+</head>
+<body>
+<div class="shell">
+
+  <!-- HEADER -->
+  <header>
+    <div class="logo">
+      <div class="logo-icon">D</div>
+      <div>
+        <div class="logo-name">DOM Intelligence</div>
+        <div class="logo-sub">ask-dom.com scraper dashboard</div>
+      </div>
+    </div>
+    <div class="status-pill">
+      <span class="dot" id="proxy-dot"></span>
+      <span id="proxy-label">proxy offline</span>
+    </div>
+  </header>
+
+  <!-- LOGIN PANEL -->
+  <div id="login-panel">
+    <div class="panel-title">Sign in to DOM</div>
+    <div class="panel-sub">via local proxy · localhost:5055</div>
+
+    <div class="notice">
+      <strong>Before logging in:</strong> start the proxy server in a terminal:<br>
+      <code>pip install flask flask-cors httpx &amp;&amp; python proxy.py</code>
+    </div>
+
+    <div class="field">
+      <label>Account</label>
+      <input type="text" id="inp-account" placeholder="account name" autocomplete="off" />
+    </div>
+    <div class="field">
+      <label>Username</label>
+      <input type="text" id="inp-username" placeholder="username" autocomplete="off" />
+    </div>
+    <div class="field">
+      <label>Password</label>
+      <input type="password" id="inp-password" placeholder="••••••••" />
+    </div>
+
+    <button class="btn" id="login-btn" onclick="doLogin()">Connect &amp; Login →</button>
+    <button class="btn secondary" onclick="showCsvImport()">↑ Import CSV instead</button>
+    <div class="err-msg" id="err-msg"></div>
+  </div>
+
+  <!-- DASHBOARD -->
+  <div id="dashboard">
+    <div class="topbar">
+      <div class="topbar-left">
+        <h1>Campaign Comparison</h1>
+        <p id="dash-meta">—</p>
+      </div>
+      <div class="topbar-actions">
+        <button class="icon-btn" onclick="refreshData()">↺ Refresh</button>
+        <button class="icon-btn" onclick="exportCSV()">↓ Export CSV</button>
+        <button class="icon-btn" onclick="doLogout()">Logout</button>
+      </div>
+    </div>
+
+    <div class="stats-row" id="stats-row">
+      <div class="stat-card"><div class="stat-label">Total Rows</div><div class="stat-value green" id="s-rows">—</div><div class="stat-delta">scraped records</div></div>
+      <div class="stat-card"><div class="stat-label">Columns</div><div class="stat-value blue" id="s-cols">—</div><div class="stat-delta">data fields</div></div>
+      <div class="stat-card"><div class="stat-label">Non-empty Cells</div><div class="stat-value" id="s-cells">—</div><div class="stat-delta">values found</div></div>
+      <div class="stat-card"><div class="stat-label">Last Scraped</div><div class="stat-value warn" id="s-time" style="font-size:16px;margin-top:8px;">—</div><div class="stat-delta">timestamp</div></div>
+    </div>
+
+    <div class="table-panel">
+      <div class="panel-head">
+        <h2>Data Table</h2>
+        <span class="row-count" id="row-count">0 rows</span>
+      </div>
+      <div class="search-wrap">
+        <input type="text" id="search-box" placeholder="Search rows…" oninput="filterRows()" />
+      </div>
+      <div class="table-scroll">
+        <div id="table-container"><div class="empty-state"><div class="big">📋</div>No data loaded yet</div></div>
+      </div>
+      <div class="pagination" id="pagination"></div>
+    </div>
+  </div>
+
+  <!-- CSV IMPORT (hidden by default) -->
+  <div id="csv-import" style="display:none; margin-top:40px;">
+    <div class="notice"><strong>CSV Import:</strong> Select a <code>dom_comparison.csv</code> generated by <code>scraper.py</code> to visualize it here.</div>
+    <div class="drop-zone" id="drop-zone" onclick="document.getElementById('file-input').click()"
+         ondragover="event.preventDefault();this.classList.add('drag')"
+         ondragleave="this.classList.remove('drag')"
+         ondrop="handleDrop(event)">
+      <div class="big">📂</div>
+      Click to browse or drag &amp; drop a CSV file
+    </div>
+    <input type="file" id="file-input" accept=".csv" onchange="handleFileSelect(event)" />
+    <button class="btn secondary" style="max-width:200px;" onclick="hideCsvImport()">← Back to Login</button>
+  </div>
+
+</div>
+
+<script>
+// ── State ────────────────────────────────────────────────────────────────────
+const PROXY = 'http://localhost:5055/proxy';
+let allRows = [], headers = [], filteredRows = [], currentPage = 1;
+const PAGE_SIZE = 50;
+let sortCol = -1, sortAsc = true;
+
+// ── Proxy health check ────────────────────────────────────────────────────────
+async function checkProxy() {
+  try {
+    const r = await fetch(`${PROXY}/login`, { method: 'GET', signal: AbortSignal.timeout(2000) });
+    setProxyStatus(true);
+  } catch {
+    setProxyStatus(false);
+  }
+}
+function setProxyStatus(online) {
+  const dot = document.getElementById('proxy-dot');
+  const lbl = document.getElementById('proxy-label');
+  dot.className = 'dot' + (online ? ' live' : '');
+  lbl.textContent = online ? 'proxy online' : 'proxy offline';
+}
+checkProxy();
+setInterval(checkProxy, 8000);
+
+// ── Login ─────────────────────────────────────────────────────────────────────
+async function doLogin() {
+  const btn = document.getElementById('login-btn');
+  const err = document.getElementById('err-msg');
+  err.textContent = '';
+  btn.disabled = true;
+  btn.textContent = 'Connecting…';
+
+  const account  = document.getElementById('inp-account').value.trim();
+  const username = document.getElementById('inp-username').value.trim();
+  const password = document.getElementById('inp-password').value;
+
+  if (!account || !username || !password) {
+    err.textContent = 'All fields are required.';
+    btn.disabled = false; btn.textContent = 'Connect & Login →'; return;
+  }
+
+  try {
+    const fd = new FormData();
+    fd.append('account', account);
+    fd.append('username', username);
+    fd.append('password', password);
+
+    const r = await fetch(`${PROXY}/login`, { method: 'POST', body: fd });
+    if (!r.ok && r.status !== 302) throw new Error(`Login failed (HTTP ${r.status})`);
+
+    // Fetch comparison data
+    btn.textContent = 'Fetching data…';
+    await fetchComparison();
+
+    document.getElementById('login-panel').style.display = 'none';
+    document.getElementById('dashboard').style.display = 'block';
+  } catch (e) {
+    err.textContent = e.message || 'Connection error — is the proxy running?';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Connect & Login →';
+  }
+}
+
+async function fetchComparison() {
+  const r = await fetch(`${PROXY}/campaign/comparison`);
+  const ct = r.headers.get('content-type') || '';
+
+  if (ct.includes('json')) {
+    const data = await r.json();
+    ingestJSON(data);
+  } else {
+    const text = await r.text();
+    // Parse as plain-text / CSV fallback
+    const lines = text.split('\n').filter(l => l.trim());
+    const rows  = lines.map(l => l.split(/\t|,/));
+    ingestRows(rows);
+  }
+}
+
+function ingestJSON(data) {
+  // Handle array of objects or array of arrays
+  if (!data || !data.length) { renderEmpty(); return; }
+  if (typeof data[0] === 'object' && !Array.isArray(data[0])) {
+    headers = Object.keys(data[0]);
+    allRows = data.map(o => headers.map(h => String(o[h] ?? '')));
+  } else {
+    allRows = data.map(r => r.map(String));
+    headers = allRows.shift() || [];
+  }
+  renderTable();
+}
+
+function ingestRows(rows) {
+  if (!rows.length) { renderEmpty(); return; }
+  headers = rows[0].map((h, i) => h || `Col ${i+1}`);
+  allRows = rows.slice(1);
+  renderTable();
+}
+
+// ── Table rendering ───────────────────────────────────────────────────────────
+function renderEmpty() {
+  document.getElementById('table-container').innerHTML =
+    '<div class="empty-state"><div class="big">🔍</div>No comparison data returned</div>';
+  updateStats([], 0);
+}
+
+function renderTable() {
+  filteredRows = [...allRows];
+  currentPage  = 1;
+  updateStats(allRows, headers.length);
+  renderPage();
+}
+
+function renderPage() {
+  const start = (currentPage - 1) * PAGE_SIZE;
+  const slice = filteredRows.slice(start, start + PAGE_SIZE);
+
+  if (!slice.length) {
+    document.getElementById('table-container').innerHTML =
+      '<div class="empty-state"><div class="big">🔍</div>No matching rows</div>';
+    document.getElementById('pagination').innerHTML = '';
+    document.getElementById('row-count').textContent = '0 rows';
+    return;
+  }
+
+  let html = '<table><thead><tr>';
+  html += '<th>#</th>';
+  headers.forEach((h, i) => {
+    const cls = i === sortCol ? ' class="sorted"' : '';
+    html += `<th${cls} onclick="sortBy(${i})">${escHtml(h)} ${i===sortCol?(sortAsc?'↑':'↓'):''}</th>`;
+  });
+  html += '</tr></thead><tbody>';
+  slice.forEach((row, ri) => {
+    html += `<tr><td>${start + ri + 1}</td>`;
+    headers.forEach((_, ci) => {
+      html += `<td title="${escHtml(row[ci]||'')}">${escHtml(row[ci]||'')}</td>`;
+    });
+    html += '</tr>';
+  });
+  html += '</tbody></table>';
+
+  document.getElementById('table-container').innerHTML = html;
+  document.getElementById('row-count').textContent = `${filteredRows.length.toLocaleString()} rows`;
+  renderPagination();
+}
+
+function renderPagination() {
+  const total = Math.ceil(filteredRows.length / PAGE_SIZE);
+  if (total <= 1) { document.getElementById('pagination').innerHTML = ''; return; }
+
+  let html = `<span>Page ${currentPage} of ${total}</span>`;
+  html += `<button class="page-btn" onclick="goPage(${currentPage-1})" ${currentPage===1?'disabled':''}>‹ Prev</button>`;
+
+  const pages = pageRange(currentPage, total);
+  pages.forEach(p => {
+    if (p === '…') { html += `<span style="color:var(--muted)">…</span>`; return; }
+    html += `<button class="page-btn ${p===currentPage?'active':''}" onclick="goPage(${p})">${p}</button>`;
+  });
+
+  html += `<button class="page-btn" onclick="goPage(${currentPage+1})" ${currentPage===total?'disabled':''}>Next ›</button>`;
+  document.getElementById('pagination').innerHTML = html;
+}
+
+function pageRange(cur, total) {
+  const delta = 2, range = [], rangeWithDots = [];
+  for (let i = Math.max(2,cur-delta); i <= Math.min(total-1,cur+delta); i++) range.push(i);
+  if (range[0] > 2) rangeWithDots.push(1,'…'); else rangeWithDots.push(1);
+  rangeWithDots.push(...range);
+  if (range[range.length-1] < total-1) rangeWithDots.push('…',total); else rangeWithDots.push(total);
+  return rangeWithDots;
+}
+
+function goPage(p) {
+  const total = Math.ceil(filteredRows.length / PAGE_SIZE);
+  if (p < 1 || p > total) return;
+  currentPage = p;
+  renderPage();
+  document.querySelector('.table-scroll')?.scrollTo(0,0);
+}
+
+// ── Sort ──────────────────────────────────────────────────────────────────────
+function sortBy(col) {
+  if (sortCol === col) { sortAsc = !sortAsc; } else { sortCol = col; sortAsc = true; }
+  filteredRows.sort((a, b) => {
+    const av = a[col] || '', bv = b[col] || '';
+    const an = parseFloat(av), bn = parseFloat(bv);
+    const cmp = (!isNaN(an) && !isNaN(bn)) ? an - bn : av.localeCompare(bv);
+    return sortAsc ? cmp : -cmp;
+  });
+  currentPage = 1;
+  renderPage();
+}
+
+// ── Filter ────────────────────────────────────────────────────────────────────
+function filterRows() {
+  const q = document.getElementById('search-box').value.toLowerCase();
+  filteredRows = q ? allRows.filter(r => r.some(c => c.toLowerCase().includes(q))) : [...allRows];
+  currentPage = 1;
+  renderPage();
+}
+
+// ── Stats ─────────────────────────────────────────────────────────────────────
+function updateStats(rows, cols) {
+  document.getElementById('s-rows').textContent  = rows.length.toLocaleString();
+  document.getElementById('s-cols').textContent  = cols;
+  const cells = rows.reduce((s,r) => s + r.filter(c=>c.trim()).length, 0);
+  document.getElementById('s-cells').textContent = cells.toLocaleString();
+  const now = new Date();
+  document.getElementById('s-time').textContent  =
+    `${now.getHours().toString().padStart(2,'0')}:${now.getMinutes().toString().padStart(2,'0')}`;
+  document.getElementById('dash-meta').textContent =
+    `Last refreshed ${now.toLocaleDateString()} ${now.toLocaleTimeString()}`;
+}
+
+// ── CSV export ────────────────────────────────────────────────────────────────
+function exportCSV() {
+  const rows = [headers, ...filteredRows];
+  const blob = new Blob([rows.map(r => r.map(c=>`"${(c||'').replace(/"/g,'""')}"`).join(',')).join('\n')],
+                        {type:'text/csv'});
+  const a = Object.assign(document.createElement('a'), {href:URL.createObjectURL(blob), download:'dom_comparison.csv'});
+  a.click();
+}
+
+// ── Refresh ───────────────────────────────────────────────────────────────────
+async function refreshData() {
+  document.getElementById('table-container').innerHTML =
+    '<div class="loader"><div class="spinner"></div> Fetching latest data…</div>';
+  try { await fetchComparison(); } catch(e) {
+    document.getElementById('table-container').innerHTML =
+      `<div class="empty-state"><div class="big">⚠️</div>${e.message}</div>`;
+  }
+}
+
+// ── Logout ────────────────────────────────────────────────────────────────────
+function doLogout() {
+  allRows=[]; headers=[]; filteredRows=[];
+  document.getElementById('dashboard').style.display='none';
+  document.getElementById('login-panel').style.display='block';
+}
+
+// ── CSV Import ────────────────────────────────────────────────────────────────
+function showCsvImport() {
+  document.getElementById('login-panel').style.display='none';
+  document.getElementById('csv-import').style.display='block';
+}
+function hideCsvImport() {
+  document.getElementById('csv-import').style.display='none';
+  document.getElementById('login-panel').style.display='block';
+}
+function handleDrop(e) {
+  e.preventDefault();
+  document.getElementById('drop-zone').classList.remove('drag');
+  const file = e.dataTransfer.files[0];
+  if (file) readCSVFile(file);
+}
+function handleFileSelect(e) { readCSVFile(e.target.files[0]); }
+
+function readCSVFile(file) {
+  const reader = new FileReader();
+  reader.onload = ev => {
+    const lines = ev.target.result.split('\n').filter(l=>l.trim());
+    const rows  = lines.map(l => parseCSVLine(l));
+    headers = rows[0] || [];
+    allRows = rows.slice(1);
+    document.getElementById('csv-import').style.display='none';
+    document.getElementById('dashboard').style.display='block';
+    renderTable();
+  };
+  reader.readAsText(file);
+}
+
+function parseCSVLine(line) {
+  const cols=[], re=/("(?:[^"]|"")*"|[^,]*)/g;
+  let m;
+  while((m=re.exec(line))!==null){
+    if(m.index===re.lastIndex){re.lastIndex++;break;}
+    let v=m[1];
+    if(v.startsWith('"')&&v.endsWith('"')) v=v.slice(1,-1).replace(/""/g,'"');
+    cols.push(v);
+  }
+  return cols;
+}
+
+// ── Utility ───────────────────────────────────────────────────────────────────
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+</script>
+</body>
+</html>
